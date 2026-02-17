@@ -1,4 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+
+import '../services/analytics_service.dart';
+import '../services/auth_service.dart';
+import '../services/messaging_service.dart';
+import 'main_app.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -11,27 +18,96 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _businessNameController = TextEditingController();
+  final TextEditingController _gstinController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
+    _businessNameController.dispose();
+    _gstinController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    final AuthService authService = context.read<AuthService>();
+    final AnalyticsService analyticsService = context.read<AnalyticsService>();
+    final MessagingService messagingService = context.read<MessagingService>();
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final NavigatorState navigator = Navigator.of(context);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Account created (demo mode).')),
-    );
-    Navigator.pop(context);
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await authService.register(
+        name: _nameController.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        phone: _phoneController.text.trim(),
+        businessName: _businessNameController.text.trim(),
+        gstin: _gstinController.text.trim(),
+      );
+      await analyticsService.logSignUp();
+      await messagingService.initialize();
+
+      if (!mounted) {
+        return;
+      }
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Account created successfully.')),
+      );
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) => const MainApp(),
+        ),
+        (Route<dynamic> route) => false,
+      );
+    } on FirebaseAuthException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final String message;
+      switch (error.code) {
+        case 'email-already-in-use':
+          message = 'This email is already registered.';
+          break;
+        case 'invalid-email':
+          message = 'Invalid email address.';
+          break;
+        case 'weak-password':
+          message = 'Password is too weak.';
+          break;
+        default:
+          message = error.message ?? 'Registration failed. Please try again.';
+      }
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('Registration failed: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -81,6 +157,43 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'Phone',
+                        prefixIcon: Icon(Icons.phone_outlined),
+                      ),
+                      validator: (String? value) =>
+                          (value == null || value.trim().isEmpty)
+                          ? 'Enter phone'
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _businessNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Business Name',
+                        prefixIcon: Icon(Icons.business_outlined),
+                      ),
+                      validator: (String? value) =>
+                          (value == null || value.trim().isEmpty)
+                          ? 'Enter business name'
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _gstinController,
+                      decoration: const InputDecoration(
+                        labelText: 'GSTIN',
+                        prefixIcon: Icon(Icons.badge_outlined),
+                      ),
+                      validator: (String? value) =>
+                          (value == null || value.trim().isEmpty)
+                          ? 'Enter GSTIN'
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
                       decoration: InputDecoration(
@@ -108,8 +221,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: _submit,
-                        child: const Text('Register'),
+                        onPressed: _isLoading ? null : _submit,
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('Register'),
                       ),
                     ),
                   ],

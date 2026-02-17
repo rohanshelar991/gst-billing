@@ -54,11 +54,20 @@ class AppTheme {
       appBarTheme: const AppBarTheme(
         backgroundColor: primaryBlue,
         foregroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: false,
         titleTextStyle: TextStyle(
           color: Colors.white,
           fontSize: 20,
           fontWeight: FontWeight.w700,
         ),
+      ),
+      chipTheme: ChipThemeData(
+        selectedColor: primaryBlue.withValues(alpha: 0.16),
+        checkmarkColor: primaryBlue,
+        side: const BorderSide(color: greyDivider),
+        labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -95,6 +104,32 @@ class AppTheme {
           textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.selected)) {
+            return primaryBlue;
+          }
+          return Colors.grey.shade300;
+        }),
+      ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         selectedItemColor: primaryBlue,
         unselectedItemColor: Colors.grey,
@@ -130,11 +165,20 @@ class AppTheme {
       appBarTheme: const AppBarTheme(
         backgroundColor: darkCard,
         foregroundColor: darkTextLight,
+        elevation: 0,
+        centerTitle: false,
         titleTextStyle: TextStyle(
           color: darkTextLight,
           fontSize: 20,
           fontWeight: FontWeight.w700,
         ),
+      ),
+      chipTheme: ChipThemeData(
+        selectedColor: darkPrimaryBlue.withValues(alpha: 0.28),
+        checkmarkColor: darkPrimaryBlue,
+        side: BorderSide(color: darkTextLight.withValues(alpha: 0.20)),
+        labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -170,6 +214,32 @@ class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.selected)) {
+            return darkPrimaryBlue;
+          }
+          return darkTextLight.withValues(alpha: 0.45);
+        }),
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         selectedItemColor: darkPrimaryBlue,

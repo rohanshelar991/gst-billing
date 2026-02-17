@@ -40,6 +40,12 @@ dependencies:
 
   # Navigation (simple)
   flutter_svg: ^2.0.9
+  firebase_core: ^4.4.0
+  firebase_auth: ^6.1.4
+  cloud_firestore: ^6.1.2
+  firebase_analytics: ^12.1.2
+  firebase_messaging: ^16.1.1
+  provider: ^6.1.5+1
 
 dev_dependencies:
   flutter_test:

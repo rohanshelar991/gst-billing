@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 
+import '../services/analytics_service.dart';
+import '../services/auth_service.dart';
+import '../services/messaging_service.dart';
 import '../theme/app_theme.dart';
 import 'main_app.dart';
 import 'register_screen.dart';
@@ -17,6 +22,15 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
 
   bool _obscureText = true;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _navigateIfLoggedIn();
+    });
+  }
 
   @override
   void dispose() {
@@ -25,21 +39,91 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleLogin() {
+  Future<void> _navigateIfLoggedIn() async {
+    try {
+      final AuthService authService = context.read<AuthService>();
+      if (authService.currentUser == null || !mounted) {
+        return;
+      }
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) => const MainApp(),
+        ),
+      );
+    } catch (_) {
+      // Tests may build the screen without initializing Firebase.
+    }
+  }
+
+  Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    final AuthService authService = context.read<AuthService>();
+    final AnalyticsService analyticsService = context.read<AnalyticsService>();
+    final MessagingService messagingService = context.read<MessagingService>();
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final NavigatorState navigator = Navigator.of(context);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Login successful (demo mode).')),
-    );
+    setState(() {
+      _isLoading = true;
+    });
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute<void>(
-        builder: (BuildContext context) => const MainApp(),
-      ),
-    );
+    try {
+      await authService.login(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+      await analyticsService.logLogin();
+      await messagingService.initialize();
+
+      if (!mounted) {
+        return;
+      }
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Login successful.')),
+      );
+      navigator.pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) => const MainApp(),
+        ),
+      );
+    } on FirebaseAuthException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final String message;
+      switch (error.code) {
+        case 'invalid-email':
+          message = 'Invalid email address.';
+          break;
+        case 'user-not-found':
+          message = 'No account found for this email.';
+          break;
+        case 'wrong-password':
+        case 'invalid-credential':
+          message = 'Incorrect email or password.';
+          break;
+        case 'too-many-requests':
+          message = 'Too many attempts. Try again later.';
+          break;
+        default:
+          message = error.message ?? 'Login failed. Please try again.';
+      }
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      messenger.showSnackBar(SnackBar(content: Text('Login failed: $error')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -131,8 +215,17 @@ class _LoginScreenState extends State<LoginScreen> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: _handleLogin,
-                            child: const Text('Login'),
+                            onPressed: _isLoading ? null : _handleLogin,
+                            child: _isLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text('Login'),
                           ),
                         ),
                         const SizedBox(height: 8),

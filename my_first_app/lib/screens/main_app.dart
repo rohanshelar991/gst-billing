@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../services/analytics_service.dart';
+import '../services/auth_service.dart';
+import '../services/messaging_service.dart';
 import '../theme/app_theme.dart';
 import 'analytics_screen.dart';
 import 'business_profile_screen.dart';
@@ -9,6 +13,7 @@ import 'clients_screen.dart';
 import 'home_screen.dart';
 import 'invoices_screen.dart';
 import 'login_screen.dart';
+import 'products_screen.dart';
 import 'profile_screen.dart';
 import 'reminders_screen.dart';
 import 'reports_screen.dart';
@@ -33,10 +38,28 @@ class _MainAppState extends State<MainApp> {
     'Calculator',
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final MessagingService? messagingService = context
+          .read<MessagingService?>();
+      final AnalyticsService? analyticsService = context
+          .read<AnalyticsService?>();
+      if (messagingService != null) {
+        await messagingService.initialize();
+      }
+      if (analyticsService != null) {
+        await analyticsService.logScreenView(_titles[_currentIndex]);
+      }
+    });
+  }
+
   void _setTab(int index) {
     setState(() {
       _currentIndex = index;
     });
+    context.read<AnalyticsService?>()?.logScreenView(_titles[index]);
   }
 
   void _pushScreen(Widget screen) {
@@ -76,138 +99,8 @@ class _MainAppState extends State<MainApp> {
     );
   }
 
-  void _showAddClientDialog() {
-    showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Add Client'),
-          content: const Text(
-            'Client creation form will be connected here later.',
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showCreateInvoiceDialog() {
-    showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Create Invoice'),
-          content: const Text(
-            'Invoice creation flow is ready for backend integration later.',
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Draft invoice created (UI demo).'),
-                  ),
-                );
-              },
-              child: const Text('Create'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showAddReminderDialog() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (BuildContext context) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                'Add Reminder',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 12),
-              const TextField(
-                decoration: InputDecoration(
-                  labelText: 'Reminder title',
-                  prefixIcon: Icon(Icons.alarm_add_outlined),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(this.context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Reminder saved (UI demo).'),
-                      ),
-                    );
-                  },
-                  child: const Text('Save Reminder'),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildFab() {
-    Widget? fab;
-    if (_currentIndex == 1) {
-      fab = FloatingActionButton(
-        onPressed: _showAddClientDialog,
-        child: const Icon(Icons.person_add_alt_1),
-      );
-    } else if (_currentIndex == 2) {
-      fab = FloatingActionButton(
-        onPressed: _showCreateInvoiceDialog,
-        child: const Icon(Icons.receipt_long_outlined),
-      );
-    } else if (_currentIndex == 3) {
-      fab = FloatingActionButton.extended(
-        onPressed: _showAddReminderDialog,
-        icon: const Icon(Icons.add_alert),
-        label: const Text('Add Reminder'),
-      );
-    }
-
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 240),
-      transitionBuilder: (Widget child, Animation<double> animation) {
-        return ScaleTransition(
-          scale: animation,
-          child: FadeTransition(opacity: animation, child: child),
-        );
-      },
-      child: fab == null
-          ? const SizedBox.shrink(key: ValueKey<String>('none'))
-          : KeyedSubtree(key: ValueKey<int>(_currentIndex), child: fab),
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _currentTab() {
@@ -230,6 +123,11 @@ class _MainAppState extends State<MainApp> {
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final AuthService? authService = context.read<AuthService?>();
+    final String userName =
+        authService?.currentUser?.displayName ?? 'Smart Tax Manager';
+    final String userEmail =
+        authService?.currentUser?.email ?? 'user@smarttax.app';
 
     return Scaffold(
       key: _scaffoldKey,
@@ -274,7 +172,7 @@ class _MainAppState extends State<MainApp> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Smart Tax Manager',
+                    userName,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
@@ -282,7 +180,7 @@ class _MainAppState extends State<MainApp> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'ui.demo@finpro.app',
+                    userEmail,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Colors.white.withValues(alpha: 0.84),
                     ),
@@ -320,6 +218,14 @@ class _MainAppState extends State<MainApp> {
               onTap: () {
                 Navigator.pop(context);
                 _pushScreen(const CalendarDueScreen());
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.inventory_2_outlined),
+              title: const Text('Products'),
+              onTap: () {
+                Navigator.pop(context);
+                _pushScreen(const ProductsScreen());
               },
             ),
             ListTile(
@@ -374,38 +280,26 @@ class _MainAppState extends State<MainApp> {
             ListTile(
               leading: const Icon(Icons.logout),
               title: const Text('Logout'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                showDialog<void>(
-                  context: context,
-                  builder: (BuildContext context) {
-                    return AlertDialog(
-                      title: const Text('Logout'),
-                      content: const Text(
-                        'Do you want to logout from this demo app?',
-                      ),
-                      actions: <Widget>[
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Cancel'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            Navigator.pushAndRemoveUntil(
-                              this.context,
-                              MaterialPageRoute<void>(
-                                builder: (BuildContext context) =>
-                                    const LoginScreen(),
-                              ),
-                              (Route<dynamic> route) => false,
-                            );
-                          },
-                          child: const Text('Logout'),
-                        ),
-                      ],
-                    );
-                  },
+                final AuthService? authService = context.read<AuthService?>();
+                final AnalyticsService? analyticsService = context
+                    .read<AnalyticsService?>();
+                final NavigatorState navigator = Navigator.of(this.context);
+                if (authService != null) {
+                  await authService.logout();
+                }
+                if (analyticsService != null) {
+                  await analyticsService.logEvent('logout');
+                }
+                if (!mounted) {
+                  return;
+                }
+                navigator.pushAndRemoveUntil(
+                  MaterialPageRoute<void>(
+                    builder: (BuildContext context) => const LoginScreen(),
+                  ),
+                  (Route<dynamic> route) => false,
                 );
               },
             ),

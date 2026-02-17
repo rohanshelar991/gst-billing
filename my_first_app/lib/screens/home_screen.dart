@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import 'calendar_due_screen.dart';
+import '../models/invoice_record.dart';
+import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/action_card.dart';
 import '../widgets/invoice_tile.dart';
 import '../widgets/stat_card.dart';
+import 'calendar_due_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.onQuickActionTabSelected});
@@ -19,9 +22,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
-
-  static const int _overdueCount = 3;
-  static const double _overdueAmount = 12000;
+  DateTime _lastUpdated = DateTime.now();
 
   final List<Map<String, dynamic>> _topClients = <Map<String, dynamic>>[
     <String, dynamic>{
@@ -71,184 +72,292 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _money(double value) => '₹${value.toStringAsFixed(0)}';
 
+  Future<void> _refreshDashboard() async {
+    await Future<void>.delayed(const Duration(milliseconds: 650));
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _lastUpdated = DateTime.now();
+    });
+  }
+
+  String _lastUpdatedLabel() {
+    final String hour = _lastUpdated.hour.toString().padLeft(2, '0');
+    final String minute = _lastUpdated.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return _DashboardSkeleton();
     }
+    final FirestoreService? firestore = context.read<FirestoreService?>();
 
-    return SingleChildScrollView(
+    return RefreshIndicator(
+      onRefresh: _refreshDashboard,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            _buildOverdueBanner(firestore),
+            _buildDashboardHero(firestore),
+            const SizedBox(height: 12),
+            Text(
+              'Welcome back, Rohan',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            _buildRevenueInsightsCard(),
+            const SizedBox(height: 16),
+            _buildStatCards(firestore),
+            const SizedBox(height: 16),
+            _buildTopClientsSection(),
+            const SizedBox(height: 16),
+            _buildIncomeTaxReminderCard(),
+            const SizedBox(height: 16),
+            Row(
+              children: <Widget>[
+                Text(
+                  'Quick Actions',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'Updated ${_lastUpdatedLabel()}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            GridView.count(
+              crossAxisCount: 2,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              childAspectRatio: 1.32,
+              children: <Widget>[
+                ActionCard(
+                  title: 'Add Client',
+                  subtitle: 'Create a new client profile',
+                  icon: Icons.person_add_alt,
+                  accentColor: const Color(0xFF065F46),
+                  centerContent: true,
+                  onTap: () => widget.onQuickActionTabSelected(1),
+                ),
+                ActionCard(
+                  title: 'Create Invoice',
+                  subtitle: 'Prepare and share invoice',
+                  icon: Icons.description_outlined,
+                  accentColor: const Color(0xFF1E3A8A),
+                  centerContent: true,
+                  onTap: () => widget.onQuickActionTabSelected(2),
+                ),
+                ActionCard(
+                  title: 'GST Due Dates',
+                  subtitle: 'View filing calendar quickly',
+                  icon: Icons.event_available_outlined,
+                  accentColor: const Color(0xFF92400E),
+                  centerContent: true,
+                  onTap: _openCalendarDueScreen,
+                ),
+                ActionCard(
+                  title: 'Send Reminder',
+                  subtitle: 'Send payment reminders',
+                  icon: Icons.send_outlined,
+                  accentColor: const Color(0xFF581C87),
+                  centerContent: true,
+                  onTap: () => widget.onQuickActionTabSelected(3),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: <Widget>[
+                Text(
+                  'Recent Invoices',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => _showMessage('Opening all invoices.'),
+                  child: const Text('View All'),
+                ),
+              ],
+            ),
+            _buildRecentInvoices(firestore),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverdueBanner(FirestoreService? firestore) {
+    if (firestore == null) {
+      return const SizedBox.shrink();
+    }
+    return StreamBuilder<int>(
+      stream: firestore.streamOverdueInvoiceCount(),
+      builder: (BuildContext context, AsyncSnapshot<int> overdueSnapshot) {
+        final int overdueCount = overdueSnapshot.data ?? 0;
+        if (overdueCount == 0) {
+          return const SizedBox.shrink();
+        }
+
+        return StreamBuilder<double>(
+          stream: firestore.streamPendingInvoiceAmount(),
+          builder:
+              (
+                BuildContext context,
+                AsyncSnapshot<double> pendingAmountSnapshot,
+              ) {
+                final double pendingAmount = pendingAmountSnapshot.data ?? 0;
+                return Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.red.withValues(alpha: 0.30),
+                    ),
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.red,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '$overdueCount Invoices Overdue - ${_money(pendingAmount)} Pending',
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+        );
+      },
+    );
+  }
+
+  Widget _buildDashboardHero(FirestoreService? firestore) {
+    return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: const LinearGradient(
+          colors: <Color>[Color(0xFF1D4ED8), Color(0xFF2563EB)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          if (_overdueCount > 0)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.red.withValues(alpha: 0.30)),
-              ),
-              child: Row(
-                children: <Widget>[
-                  const Icon(Icons.warning_amber_rounded, color: Colors.red),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      '$_overdueCount Invoices Overdue - ${_money(_overdueAmount)} Pending',
-                      style: const TextStyle(
-                        color: Colors.red,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+          Text(
+            'Business Health Snapshot',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
             ),
+          ),
+          const SizedBox(height: 6),
           Text(
-            'Welcome back, Rohan',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+            'Live dashboard updated at ${_lastUpdatedLabel()}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Colors.white.withValues(alpha: 0.9),
+            ),
           ),
-          const SizedBox(height: 8),
-          _buildRevenueInsightsCard(),
-          const SizedBox(height: 16),
-          _buildStatCards(),
-          const SizedBox(height: 16),
-          _buildTopClientsSection(),
-          const SizedBox(height: 16),
-          _buildIncomeTaxReminderCard(),
-          const SizedBox(height: 16),
-          Text(
-            'Quick Actions',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          GridView.count(
-            crossAxisCount: 2,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.32,
-            children: <Widget>[
-              ActionCard(
-                title: 'Add Client',
-                subtitle: 'Create a new client profile',
-                icon: Icons.person_add_alt,
-                accentColor: const Color(0xFF065F46),
-                centerContent: true,
-                onTap: () => widget.onQuickActionTabSelected(1),
-              ),
-              ActionCard(
-                title: 'Create Invoice',
-                subtitle: 'Prepare and share invoice',
-                icon: Icons.description_outlined,
-                accentColor: const Color(0xFF1E3A8A),
-                centerContent: true,
-                onTap: () => widget.onQuickActionTabSelected(2),
-              ),
-              ActionCard(
-                title: 'GST Due Dates',
-                subtitle: 'View filing calendar quickly',
-                icon: Icons.event_available_outlined,
-                accentColor: const Color(0xFF92400E),
-                centerContent: true,
-                onTap: _openCalendarDueScreen,
-              ),
-              ActionCard(
-                title: 'Send Reminder',
-                subtitle: 'Send payment reminders',
-                icon: Icons.send_outlined,
-                accentColor: const Color(0xFF581C87),
-                centerContent: true,
-                onTap: () => widget.onQuickActionTabSelected(3),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
-              Text(
-                'Recent Invoices',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              StreamBuilder<double>(
+                stream:
+                    firestore?.streamPendingInvoiceAmount() ??
+                    Stream<double>.value(0),
+                builder:
+                    (BuildContext context, AsyncSnapshot<double> snapshot) {
+                      return Expanded(
+                        child: _heroMetric(
+                          'Pending',
+                          _money(snapshot.data ?? 0),
+                        ),
+                      );
+                    },
               ),
-              TextButton(
-                onPressed: () => _showMessage('Opening all invoices.'),
-                child: const Text('View All'),
+              const SizedBox(width: 8),
+              StreamBuilder<int>(
+                stream:
+                    firestore?.streamPendingInvoiceCount() ??
+                    Stream<int>.value(0),
+                builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
+                  return Expanded(
+                    child: _heroMetric('Open Tasks', '${snapshot.data ?? 0}'),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              StreamBuilder<int>(
+                stream:
+                    firestore?.streamUpcomingDueCount() ?? Stream<int>.value(0),
+                builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
+                  return Expanded(
+                    child: _heroMetric(
+                      'Due This Week',
+                      '${snapshot.data ?? 0}',
+                    ),
+                  );
+                },
               ),
             ],
           ),
-          const InvoiceTile(
-            invoiceNo: 'INV-2031',
-            clientName: 'Apex Interiors',
-            amount: '₹27,500',
-            status: 'Pending',
+        ],
+      ),
+    );
+  }
+
+  Widget _heroMetric(String title, String value) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: Colors.white.withValues(alpha: 0.16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+            ),
           ),
-          const InvoiceTile(
-            invoiceNo: 'INV-2030',
-            clientName: 'Urban Pulse Media',
-            amount: '₹43,200',
-            status: 'Paid',
-          ),
-          const InvoiceTile(
-            invoiceNo: 'INV-2029',
-            clientName: 'Nova Fabricators',
-            amount: '₹18,750',
-            status: 'Overdue',
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: <Widget>[
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: primaryBlue.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.bar_chart, color: primaryBlue),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          'Monthly Revenue Summary',
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '₹4,85,300 this month',
-                          style: Theme.of(context).textTheme.bodyLarge
-                              ?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: Colors.green,
-                              ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '12.8% higher than last month',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+          const SizedBox(height: 3),
+          Text(
+            title,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.9),
+              fontSize: 11,
             ),
           ),
         ],
@@ -282,7 +391,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: Colors.green.withValues(alpha: 0.15),
                   ),
                   child: const Text(
-                    '↑ 12%',
+                    'Realtime',
                     style: TextStyle(
                       color: Colors.green,
                       fontWeight: FontWeight.w700,
@@ -294,9 +403,9 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 12),
             Row(
               children: <Widget>[
-                Expanded(child: _metricBlock('This Month', '₹4,85,300')),
+                Expanded(child: _metricBlock('Sync', 'Firestore')),
                 const SizedBox(width: 8),
-                Expanded(child: _metricBlock('Last Month', '₹4,32,900')),
+                Expanded(child: _metricBlock('Auth', 'Firebase Auth')),
               ],
             ),
             const SizedBox(height: 12),
@@ -324,7 +433,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Padding(
                       padding: EdgeInsets.all(8),
                       child: Text(
-                        'Trend Graph (UI)',
+                        'Live Data Trend',
                         style: TextStyle(fontSize: 11),
                       ),
                     ),
@@ -361,35 +470,53 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildStatCards() {
+  Widget _buildStatCards(FirestoreService? firestore) {
     return SizedBox(
       height: 132,
       child: Row(
         children: <Widget>[
           Expanded(
-            child: StatCard(
-              title: 'Total Clients',
-              value: '42',
-              icon: Icons.people_outline,
-              gradient: blueGradient,
+            child: StreamBuilder<int>(
+              stream: firestore?.streamClientCount() ?? Stream<int>.value(0),
+              builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
+                return StatCard(
+                  title: 'Total Clients',
+                  value: '${snapshot.data ?? 0}',
+                  icon: Icons.people_outline,
+                  gradient: blueGradient,
+                );
+              },
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: StatCard(
-              title: 'Pending Invoices',
-              value: '9',
-              icon: Icons.receipt_long_outlined,
-              gradient: orangeGradient,
+            child: StreamBuilder<int>(
+              stream:
+                  firestore?.streamPendingInvoiceCount() ??
+                  Stream<int>.value(0),
+              builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
+                return StatCard(
+                  title: 'Pending Invoices',
+                  value: '${snapshot.data ?? 0}',
+                  icon: Icons.receipt_long_outlined,
+                  gradient: orangeGradient,
+                );
+              },
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: StatCard(
-              title: 'Upcoming Due',
-              value: '5',
-              icon: Icons.event_note_outlined,
-              gradient: greenGradient,
+            child: StreamBuilder<int>(
+              stream:
+                  firestore?.streamUpcomingDueCount() ?? Stream<int>.value(0),
+              builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
+                return StatCard(
+                  title: 'Upcoming Due',
+                  value: '${snapshot.data ?? 0}',
+                  icon: Icons.event_note_outlined,
+                  gradient: greenGradient,
+                );
+              },
             ),
           ),
         ],
@@ -512,6 +639,39 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildRecentInvoices(FirestoreService? firestore) {
+    return StreamBuilder<List<InvoiceRecord>>(
+      stream:
+          firestore?.streamRecentInvoices(limit: 3) ??
+          Stream<List<InvoiceRecord>>.value(const <InvoiceRecord>[]),
+      builder: (BuildContext context, AsyncSnapshot<List<InvoiceRecord>> snapshot) {
+        final List<InvoiceRecord> invoices = snapshot.data ?? <InvoiceRecord>[];
+        if (invoices.isEmpty) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('No invoices yet. Create your first invoice.'),
+            ),
+          );
+        }
+
+        return Column(
+          children: invoices.map((InvoiceRecord invoice) {
+            return InvoiceTile(
+              invoiceNo: invoice.number,
+              clientName: invoice.client,
+              amount: _money(invoice.totalAmount),
+              status: invoice.status,
+              dateLabel:
+                  '${invoice.date.day}/${invoice.date.month}/${invoice.date.year}',
+              tags: invoice.tags,
+            );
+          }).toList(),
+        );
+      },
     );
   }
 }

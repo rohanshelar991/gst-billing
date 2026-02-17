@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1045577090721",
+    "project_id": "rohandb-58168",
+    "storage_bucket": "rohandb-58168.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1045577090721:android:c54ca0d1329e8c6359d2e0",
+        "android_client_info": {
+          "package_name": "com.example.my_first_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC16CXxOYj_dcbFdifWUnJGl3n1IhutuDw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

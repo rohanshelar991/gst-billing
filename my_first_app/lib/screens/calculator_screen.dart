@@ -1,7 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../services/analytics_service.dart';
+import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 
 enum GstType { cgstSgst, igst, noGst }
@@ -550,6 +553,49 @@ class _AdvancedCalculatorScreenState extends State<AdvancedCalculatorScreen> {
     return '$sign₹${value.abs().toStringAsFixed(2)}';
   }
 
+  Future<void> _saveAsInvoiceItem() async {
+    try {
+      final FirestoreService firestoreService = context
+          .read<FirestoreService>();
+      final AnalyticsService analyticsService = context
+          .read<AnalyticsService>();
+      final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
+      final double pricePerPiece = _readController(_priceController);
+      final double quantity = _readController(_quantityController);
+      final double discountPercent = _readController(
+        _discountController,
+      ).clamp(0, 100);
+      final double markupPercent = _readController(
+        _markupController,
+      ).clamp(0, 1000);
+
+      if (pricePerPiece <= 0 || quantity <= 0) {
+        _showCalculatorError('Enter valid price and quantity before saving.');
+        return;
+      }
+
+      await firestoreService.addInvoiceFromCalculator(
+        pricePerPiece: pricePerPiece,
+        quantity: quantity,
+        gstRate: _selectedGstRate,
+        gstType: _selectedGstType.name,
+        discountPercent: discountPercent,
+        markupPercent: markupPercent,
+      );
+      await analyticsService.logEvent('calculator_save_invoice');
+
+      if (!mounted) {
+        return;
+      }
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Saved as invoice draft in Firestore.')),
+      );
+    } catch (error) {
+      _showCalculatorError('Could not save invoice draft: $error');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final Widget content = SingleChildScrollView(
@@ -978,24 +1024,47 @@ class _AdvancedCalculatorScreenState extends State<AdvancedCalculatorScreen> {
               ],
             ),
             const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _recalculateBilling,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryBlue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _recalculateBilling,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryBlue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(Icons.calculate_outlined),
+                    label: const Text(
+                      'Calculate Bill',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
-                icon: const Icon(Icons.calculate_outlined),
-                label: const Text(
-                  'Calculate Bill',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _saveAsInvoiceItem,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    icon: const Icon(Icons.cloud_upload_outlined),
+                    label: const Text(
+                      'Save Invoice',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
             const SizedBox(height: 16),
             AnimatedContainer(
