@@ -39,6 +39,34 @@ class InvoiceItem {
   }
 }
 
+class InvoicePaymentEntry {
+  const InvoicePaymentEntry({
+    required this.amount,
+    required this.method,
+    required this.date,
+  });
+
+  final double amount;
+  final String method;
+  final DateTime date;
+
+  Map<String, dynamic> toMap() {
+    return <String, dynamic>{
+      'amount': amount,
+      'method': method,
+      'date': date.toIso8601String(),
+    };
+  }
+
+  factory InvoicePaymentEntry.fromMap(Map<String, dynamic> map) {
+    return InvoicePaymentEntry(
+      amount: (map['amount'] as num?)?.toDouble() ?? 0,
+      method: map['method'] as String? ?? '',
+      date: InvoiceRecord._readDate(map['date']),
+    );
+  }
+}
+
 class InvoiceRecord {
   const InvoiceRecord({
     required this.id,
@@ -63,6 +91,7 @@ class InvoiceRecord {
     required this.cgstAmountValue,
     required this.sgstAmountValue,
     required this.igstAmountValue,
+    required this.paymentHistory,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -89,6 +118,7 @@ class InvoiceRecord {
   final double cgstAmountValue;
   final double sgstAmountValue;
   final double igstAmountValue;
+  final List<InvoicePaymentEntry> paymentHistory;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -170,6 +200,7 @@ class InvoiceRecord {
     double? cgstAmountValue,
     double? sgstAmountValue,
     double? igstAmountValue,
+    List<InvoicePaymentEntry>? paymentHistory,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -196,6 +227,7 @@ class InvoiceRecord {
       cgstAmountValue: cgstAmountValue ?? this.cgstAmountValue,
       sgstAmountValue: sgstAmountValue ?? this.sgstAmountValue,
       igstAmountValue: igstAmountValue ?? this.igstAmountValue,
+      paymentHistory: paymentHistory ?? this.paymentHistory,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -227,6 +259,9 @@ class InvoiceRecord {
         'igst': igstAmount,
         'totalTax': gstAmount,
       },
+      'paymentHistory': paymentHistory
+          .map((InvoicePaymentEntry entry) => entry.toMap())
+          .toList(),
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -267,6 +302,8 @@ class InvoiceRecord {
     final double computedBalanceAmount = balanceAmount > 0
         ? balanceAmount
         : math.max(0, computedTotalAmount - computedPaidAmount);
+    final List<dynamic> rawPaymentHistory =
+        map['paymentHistory'] as List<dynamic>? ?? <dynamic>[];
 
     return InvoiceRecord(
       id: id,
@@ -301,6 +338,18 @@ class InvoiceRecord {
       cgstAmountValue: cgst,
       sgstAmountValue: sgst,
       igstAmountValue: igst,
+      paymentHistory:
+          rawPaymentHistory
+              .map(
+                (dynamic entry) => InvoicePaymentEntry.fromMap(
+                  (entry as Map<Object?, Object?>).cast<String, dynamic>(),
+                ),
+              )
+              .toList()
+            ..sort(
+              (InvoicePaymentEntry a, InvoicePaymentEntry b) =>
+                  b.date.compareTo(a.date),
+            ),
       createdAt: _readDate(map['createdAt']),
       updatedAt: _readDate(map['updatedAt']),
     );

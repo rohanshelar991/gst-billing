@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/activity_log_record.dart';
 import '../models/client_record.dart';
 import '../models/company_record.dart';
 import '../models/invoice_record.dart';
@@ -290,6 +291,57 @@ class FirestoreService {
     });
   }
 
+  Stream<List<ActivityLogRecord>> streamActivityLogs({
+    int limit = 120,
+    bool onlyActiveCompany = true,
+  }) {
+    return _authService.authStateChanges().asyncExpand((user) {
+      if (user == null) {
+        return Stream<List<ActivityLogRecord>>.value(
+          const <ActivityLogRecord>[],
+        );
+      }
+      final Stream<QuerySnapshot<Map<String, dynamic>>> activityStream =
+          _activityCollection(
+            user.uid,
+          ).orderBy('timestamp', descending: true).limit(limit * 2).snapshots();
+
+      if (!onlyActiveCompany) {
+        return activityStream.map((
+          QuerySnapshot<Map<String, dynamic>> snapshot,
+        ) {
+          return snapshot.docs.map((
+            QueryDocumentSnapshot<Map<String, dynamic>> doc,
+          ) {
+            return ActivityLogRecord.fromMap(id: doc.id, map: doc.data());
+          }).toList();
+        });
+      }
+
+      return _streamActiveCompanyIdForUid(user.uid).asyncExpand((companyId) {
+        return activityStream.map((
+          QuerySnapshot<Map<String, dynamic>> snapshot,
+        ) {
+          final List<ActivityLogRecord> activity = snapshot.docs
+              .map((QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+                return ActivityLogRecord.fromMap(id: doc.id, map: doc.data());
+              })
+              .where((ActivityLogRecord item) {
+                if (companyId == null || companyId.isEmpty) {
+                  return true;
+                }
+                return item.companyId == companyId;
+              })
+              .toList();
+          if (activity.length <= limit) {
+            return activity;
+          }
+          return activity.take(limit).toList();
+        });
+      });
+    });
+  }
+
   Future<String> getCurrentUserRole() async {
     final String uid = _requireUid();
     final DocumentSnapshot<Map<String, dynamic>> user = await _userDoc(
@@ -464,6 +516,12 @@ class FirestoreService {
       'activeCompanyId': companyId,
       'updatedAt': Timestamp.now(),
     }, SetOptions(merge: true));
+    await _logActivity(
+      uid: uid,
+      companyId: companyId,
+      action: 'company_switched',
+      metadata: <String, dynamic>{'companyId': companyId},
+    );
   }
 
   Future<void> saveBusinessProfile({

@@ -824,12 +824,16 @@ class InvoiceDetailScreen extends StatelessWidget {
 
   Future<void> _recordPayment(
     BuildContext context,
-    InvoiceRecord currentInvoice,
-  ) async {
+    InvoiceRecord currentInvoice, {
+    double? presetAmount,
+    String method = 'UPI',
+  }) async {
     final GlobalKey<FormState> formKey = GlobalKey<FormState>();
-    final TextEditingController amountController = TextEditingController();
+    final TextEditingController amountController = TextEditingController(
+      text: presetAmount == null ? '' : presetAmount.toStringAsFixed(2),
+    );
     final TextEditingController methodController = TextEditingController(
-      text: 'UPI',
+      text: method,
     );
 
     await showModalBottomSheet<void>(
@@ -864,7 +868,7 @@ class InvoiceDetailScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    Text('Balance: ${_money(currentInvoice.totalAmount)}'),
+                    Text('Balance: ${_money(currentInvoice.balanceAmount)}'),
                     const SizedBox(height: 10),
                     TextFormField(
                       controller: amountController,
@@ -880,6 +884,13 @@ class InvoiceDetailScreen extends StatelessWidget {
                             double.tryParse(value?.trim() ?? '') ?? 0;
                         if (amount <= 0) {
                           return 'Enter valid amount';
+                        }
+                        final double maxPayable =
+                            currentInvoice.balanceAmount <= 0
+                            ? currentInvoice.totalAmount
+                            : currentInvoice.balanceAmount;
+                        if (amount > maxPayable) {
+                          return 'Amount cannot exceed ${_money(maxPayable)}';
                         }
                         return null;
                       },
@@ -935,6 +946,23 @@ class InvoiceDetailScreen extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _receiveFullBalance(
+    BuildContext context,
+    InvoiceRecord currentInvoice,
+  ) async {
+    final double balance = currentInvoice.balanceAmount;
+    if (balance <= 0) {
+      _showMessage(context, 'No pending balance on this invoice.');
+      return;
+    }
+    await _recordPayment(
+      context,
+      currentInvoice,
+      presetAmount: balance,
+      method: 'Settlement',
     );
   }
 
@@ -1065,6 +1093,44 @@ class InvoiceDetailScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              'Payment Center',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 8),
+                            _row(
+                              'Paid Amount',
+                              _money(currentInvoice.paidAmount),
+                            ),
+                            _row(
+                              'Balance Amount',
+                              _money(currentInvoice.balanceAmount),
+                              emphasize: currentInvoice.balanceAmount > 0,
+                            ),
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: LinearProgressIndicator(
+                                minHeight: 8,
+                                value: currentInvoice.totalAmount <= 0
+                                    ? 0
+                                    : (currentInvoice.paidAmount /
+                                              currentInvoice.totalAmount)
+                                          .clamp(0, 1),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -1084,6 +1150,12 @@ class InvoiceDetailScreen extends StatelessWidget {
                               _recordPayment(context, currentInvoice),
                           child: const Text('Record Payment'),
                         ),
+                        if (currentInvoice.balanceAmount > 0)
+                          OutlinedButton(
+                            onPressed: () =>
+                                _receiveFullBalance(context, currentInvoice),
+                            child: const Text('Receive Full Balance'),
+                          ),
                         if (canDeleteInvoice)
                           OutlinedButton(
                             onPressed: () =>
@@ -1122,6 +1194,51 @@ class InvoiceDetailScreen extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (currentInvoice.paymentHistory.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 8),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                'Payment History',
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 8),
+                              for (final InvoicePaymentEntry entry
+                                  in currentInvoice.paymentHistory)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Row(
+                                    children: <Widget>[
+                                      const Icon(
+                                        Icons.payments_outlined,
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          '${entry.method.isEmpty ? 'Payment' : entry.method} • '
+                                          '${entry.date.day}/${entry.date.month}/${entry.date.year}',
+                                        ),
+                                      ),
+                                      Text(
+                                        _money(entry.amount),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 10),
                     SizedBox(
                       width: double.infinity,

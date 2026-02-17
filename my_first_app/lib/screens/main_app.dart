@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/messaging_service.dart';
 import '../theme/app_theme.dart';
+import 'activity_logs_screen.dart';
 import 'analytics_screen.dart';
 import 'business_profile_screen.dart';
 import 'calendar_due_screen.dart';
@@ -356,6 +357,14 @@ class _MainAppState extends State<MainApp> {
               onTap: () {
                 Navigator.pop(context);
                 _pushScreen(const ReportsScreen());
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.history_outlined),
+              title: const Text('Activity Logs'),
+              onTap: () {
+                Navigator.pop(context);
+                _pushScreen(const ActivityLogsScreen());
               },
             ),
             ListTile(
