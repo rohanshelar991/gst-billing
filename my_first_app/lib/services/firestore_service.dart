@@ -1025,6 +1025,9 @@ class FirestoreService {
     DateTime? paymentDate,
   }) async {
     await _withActiveCompany((String uid, String companyId) async {
+      if (amount <= 0) {
+        throw StateError('Payment amount must be greater than zero.');
+      }
       final DocumentReference<Map<String, dynamic>> invoiceRef =
           _invoicesCollection(uid, companyId).doc(invoiceId);
       final DocumentSnapshot<Map<String, dynamic>> snapshot = await invoiceRef
@@ -1033,9 +1036,17 @@ class FirestoreService {
       final double totalAmount = (map['totalAmount'] as num?)?.toDouble() ?? 0;
       final double currentPaidAmount =
           (map['paidAmount'] as num?)?.toDouble() ?? 0;
+      final double pendingBeforePayment = math.max(
+        0,
+        totalAmount - currentPaidAmount,
+      );
+      if (pendingBeforePayment <= 0) {
+        throw StateError('Invoice is already fully paid.');
+      }
+      final double appliedAmount = math.min(pendingBeforePayment, amount);
       final double nextPaidAmount = math.min(
         totalAmount,
-        currentPaidAmount + amount,
+        currentPaidAmount + appliedAmount,
       );
       final double balanceAmount = math.max(0, totalAmount - nextPaidAmount);
       final String status = balanceAmount == 0
@@ -1045,7 +1056,7 @@ class FirestoreService {
       final List<dynamic> history =
           (map['paymentHistory'] as List<dynamic>?) ?? <dynamic>[];
       history.add(<String, dynamic>{
-        'amount': amount,
+        'amount': appliedAmount,
         'method': method.trim().isEmpty ? 'cash' : method.trim().toLowerCase(),
         'date': Timestamp.fromDate(paymentDate ?? DateTime.now()),
       });
@@ -1067,7 +1078,7 @@ class FirestoreService {
         action: 'payment_received',
         metadata: <String, dynamic>{
           'invoiceId': invoiceId,
-          'amount': amount,
+          'amount': appliedAmount,
           'method': method.trim(),
         },
       );

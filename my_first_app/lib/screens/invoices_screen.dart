@@ -551,10 +551,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               double value,
               InvoiceRecord invoice,
             ) {
-              if (invoice.status.toLowerCase() == 'paid') {
-                return value;
-              }
-              return value + invoice.totalAmount;
+              return value + invoice.balanceAmount;
             });
 
             return Column(
@@ -885,10 +882,10 @@ class InvoiceDetailScreen extends StatelessWidget {
                         if (amount <= 0) {
                           return 'Enter valid amount';
                         }
-                        final double maxPayable =
-                            currentInvoice.balanceAmount <= 0
-                            ? currentInvoice.totalAmount
-                            : currentInvoice.balanceAmount;
+                        final double maxPayable = currentInvoice.balanceAmount;
+                        if (maxPayable <= 0) {
+                          return 'Invoice is already fully paid';
+                        }
                         if (amount > maxPayable) {
                           return 'Amount cannot exceed ${_money(maxPayable)}';
                         }
@@ -1146,8 +1143,9 @@ class InvoiceDetailScreen extends StatelessWidget {
                           child: const Text('Mark Paid'),
                         ),
                         OutlinedButton(
-                          onPressed: () =>
-                              _recordPayment(context, currentInvoice),
+                          onPressed: currentInvoice.balanceAmount > 0
+                              ? () => _recordPayment(context, currentInvoice)
+                              : null,
                           child: const Text('Record Payment'),
                         ),
                         if (currentInvoice.balanceAmount > 0)
