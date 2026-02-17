@@ -90,6 +90,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         case 'weak-password':
           message = 'Password is too weak.';
           break;
+        case 'profile-setup-failed':
+          message =
+              error.message ??
+              'Could not save profile to Firestore. Check Firebase rules and try again.';
+          break;
         default:
           message = error.message ?? 'Registration failed. Please try again.';
       }

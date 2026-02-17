@@ -58,15 +58,27 @@ class AuthService {
     final User? user = credential.user;
     if (user != null) {
       await user.updateDisplayName(name.trim());
-      await _createUserProfile(
-        uid: user.uid,
-        name: name,
-        email: email,
-        phone: phone,
-        businessName: businessName,
-        gstin: gstin,
-        role: role,
-      );
+      try {
+        await _createUserProfile(
+          uid: user.uid,
+          name: name,
+          email: email,
+          phone: phone,
+          businessName: businessName,
+          gstin: gstin,
+          role: role,
+        );
+      } on FirebaseException catch (error) {
+        try {
+          await user.delete();
+        } catch (_) {}
+        throw FirebaseAuthException(
+          code: 'profile-setup-failed',
+          message:
+              'Authentication succeeded but Firestore profile setup failed (${error.code}). '
+              'Check Firestore setup and rules, then try again.',
+        );
+      }
     }
 
     return credential;
