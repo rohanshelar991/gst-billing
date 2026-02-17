@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/company_record.dart';
 import '../services/analytics_service.dart';
 import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
 import '../services/messaging_service.dart';
 import '../theme/app_theme.dart';
 import 'analytics_screen.dart';
@@ -10,11 +12,13 @@ import 'business_profile_screen.dart';
 import 'calendar_due_screen.dart';
 import 'calculator_screen.dart';
 import 'clients_screen.dart';
+import 'company_management_screen.dart';
 import 'home_screen.dart';
 import 'invoices_screen.dart';
 import 'login_screen.dart';
 import 'products_screen.dart';
 import 'profile_screen.dart';
+import 'recurring_invoices_screen.dart';
 import 'reminders_screen.dart';
 import 'reports_screen.dart';
 import 'settings_screen.dart';
@@ -46,11 +50,16 @@ class _MainAppState extends State<MainApp> {
           .read<MessagingService?>();
       final AnalyticsService? analyticsService = context
           .read<AnalyticsService?>();
+      final FirestoreService? firestoreService = context
+          .read<FirestoreService?>();
       if (messagingService != null) {
         await messagingService.initialize();
       }
       if (analyticsService != null) {
         await analyticsService.logScreenView(_titles[_currentIndex]);
+      }
+      if (firestoreService != null) {
+        await firestoreService.processRecurringInvoicesForToday();
       }
     });
   }
@@ -120,6 +129,74 @@ class _MainAppState extends State<MainApp> {
     }
   }
 
+  Widget _buildCompanySwitcher() {
+    final FirestoreService? firestore = context.read<FirestoreService?>();
+    if (firestore == null) {
+      return const SizedBox.shrink();
+    }
+    return StreamBuilder<String?>(
+      stream: firestore.streamActiveCompanyId(),
+      builder:
+          (BuildContext context, AsyncSnapshot<String?> activeCompanySnapshot) {
+            return StreamBuilder<List<CompanyRecord>>(
+              stream: firestore.streamCompanies(),
+              builder:
+                  (
+                    BuildContext context,
+                    AsyncSnapshot<List<CompanyRecord>> companiesSnapshot,
+                  ) {
+                    final List<CompanyRecord> companies =
+                        companiesSnapshot.data ?? <CompanyRecord>[];
+                    if (companies.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    final String? activeCompanyId = activeCompanySnapshot.data;
+                    final CompanyRecord activeCompany = companies.firstWhere(
+                      (CompanyRecord c) => c.id == activeCompanyId,
+                      orElse: () => companies.first,
+                    );
+                    return PopupMenuButton<String>(
+                      tooltip: 'Switch Company',
+                      icon: const Icon(Icons.apartment_outlined),
+                      onSelected: (String selectedCompanyId) async {
+                        final String selectedCompanyName = companies
+                            .firstWhere(
+                              (CompanyRecord c) => c.id == selectedCompanyId,
+                            )
+                            .name;
+                        final ScaffoldMessengerState messenger =
+                            ScaffoldMessenger.of(this.context);
+                        await firestore.setActiveCompany(selectedCompanyId);
+                        if (!mounted) {
+                          return;
+                        }
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text('Switched to $selectedCompanyName'),
+                          ),
+                        );
+                      },
+                      itemBuilder: (BuildContext context) {
+                        return companies.map((CompanyRecord company) {
+                          final bool selected = company.id == activeCompany.id;
+                          return PopupMenuItem<String>(
+                            value: company.id,
+                            child: Row(
+                              children: <Widget>[
+                                Expanded(child: Text(company.name)),
+                                if (selected) const Icon(Icons.check, size: 16),
+                              ],
+                            ),
+                          );
+                        }).toList();
+                      },
+                    );
+                  },
+            );
+          },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
@@ -132,12 +209,33 @@ class _MainAppState extends State<MainApp> {
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        title: Text(_titles[_currentIndex]),
+        title: StreamBuilder<CompanyRecord?>(
+          stream: context.read<FirestoreService?>()?.streamActiveCompany(),
+          builder:
+              (
+                BuildContext context,
+                AsyncSnapshot<CompanyRecord?> companySnapshot,
+              ) {
+                final CompanyRecord? company = companySnapshot.data;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(_titles[_currentIndex]),
+                    if (company != null)
+                      Text(
+                        company.name,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                  ],
+                );
+              },
+        ),
         leading: IconButton(
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           icon: const Icon(Icons.menu),
         ),
         actions: <Widget>[
+          _buildCompanySwitcher(),
           IconButton(
             onPressed: () => _pushScreen(const ProfileScreen()),
             icon: const Icon(Icons.person_outline),
@@ -205,6 +303,14 @@ class _MainAppState extends State<MainApp> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.apartment_outlined),
+              title: const Text('Companies'),
+              onTap: () {
+                Navigator.pop(context);
+                _pushScreen(const CompanyManagementScreen());
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.business_center_outlined),
               title: const Text('Business Profile'),
               onTap: () {
@@ -226,6 +332,14 @@ class _MainAppState extends State<MainApp> {
               onTap: () {
                 Navigator.pop(context);
                 _pushScreen(const ProductsScreen());
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.repeat_on_outlined),
+              title: const Text('Recurring Invoices'),
+              onTap: () {
+                Navigator.pop(context);
+                _pushScreen(const RecurringInvoicesScreen());
               },
             ),
             ListTile(

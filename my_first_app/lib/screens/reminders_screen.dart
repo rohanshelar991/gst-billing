@@ -73,10 +73,10 @@ class _RemindersScreenState extends State<RemindersScreen> {
     final GlobalKey<FormState> formKey = GlobalKey<FormState>();
     final TextEditingController titleController = TextEditingController();
     final TextEditingController invoiceIdController = TextEditingController(
-      text: 'invoice_manual',
+      text: '',
     );
     final TextEditingController clientIdController = TextEditingController(
-      text: 'client_manual',
+      text: '',
     );
     final TextEditingController clientNameController = TextEditingController();
     final TextEditingController messageController = TextEditingController();
@@ -531,6 +531,45 @@ class _RemindersScreenState extends State<RemindersScreen> {
     );
   }
 
+  Future<void> _setReminderStatus(
+    ReminderRecord reminder,
+    String status,
+  ) async {
+    final FirestoreService firestore = context.read<FirestoreService>();
+    final AnalyticsService analytics = context.read<AnalyticsService>();
+    try {
+      await firestore.updateReminderStatus(
+        reminderId: reminder.id,
+        status: status,
+      );
+      await analytics.logEvent(
+        'reminder_status_update',
+        parameters: <String, Object>{'status': status},
+      );
+      if (!mounted) {
+        return;
+      }
+      _showMessage('Reminder marked $status.');
+    } catch (error) {
+      _showMessage('Could not update reminder: $error');
+    }
+  }
+
+  Future<void> _deleteReminder(ReminderRecord reminder) async {
+    final FirestoreService firestore = context.read<FirestoreService>();
+    final AnalyticsService analytics = context.read<AnalyticsService>();
+    try {
+      await firestore.deleteReminder(reminderId: reminder.id);
+      await analytics.logEvent('delete_reminder');
+      if (!mounted) {
+        return;
+      }
+      _showMessage('Reminder deleted.');
+    } catch (error) {
+      _showMessage('Could not delete reminder: $error');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final FirestoreService? firestoreService = context
@@ -805,6 +844,65 @@ class _RemindersScreenState extends State<RemindersScreen> {
                                             ).textTheme.bodySmall,
                                           ),
                                           const Spacer(),
+                                          PopupMenuButton<String>(
+                                            icon: const Icon(
+                                              Icons.more_vert,
+                                              size: 18,
+                                            ),
+                                            onSelected: (String value) {
+                                              if (value == 'pending') {
+                                                _setReminderStatus(
+                                                  reminder,
+                                                  'Pending',
+                                                );
+                                                return;
+                                              }
+                                              if (value == 'scheduled') {
+                                                _setReminderStatus(
+                                                  reminder,
+                                                  'Scheduled',
+                                                );
+                                                return;
+                                              }
+                                              if (value == 'done') {
+                                                _setReminderStatus(
+                                                  reminder,
+                                                  'Done',
+                                                );
+                                                return;
+                                              }
+                                              if (value == 'delete') {
+                                                _deleteReminder(reminder);
+                                              }
+                                            },
+                                            itemBuilder:
+                                                (BuildContext context) {
+                                                  return const <
+                                                    PopupMenuEntry<String>
+                                                  >[
+                                                    PopupMenuItem<String>(
+                                                      value: 'pending',
+                                                      child: Text(
+                                                        'Mark Pending',
+                                                      ),
+                                                    ),
+                                                    PopupMenuItem<String>(
+                                                      value: 'scheduled',
+                                                      child: Text(
+                                                        'Mark Scheduled',
+                                                      ),
+                                                    ),
+                                                    PopupMenuItem<String>(
+                                                      value: 'done',
+                                                      child: Text('Mark Done'),
+                                                    ),
+                                                    PopupMenuItem<String>(
+                                                      value: 'delete',
+                                                      child: Text('Delete'),
+                                                    ),
+                                                  ];
+                                                },
+                                          ),
                                           Switch(
                                             value: reminder.enabled,
                                             onChanged: (bool value) async {

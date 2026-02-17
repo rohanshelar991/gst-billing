@@ -10,6 +10,7 @@ class ClientTile extends StatelessWidget {
     required this.pendingAmount,
     required this.isActive,
     this.onTap,
+    this.action,
   });
 
   final String name;
@@ -17,6 +18,7 @@ class ClientTile extends StatelessWidget {
   final String pendingAmount;
   final bool isActive;
   final VoidCallback? onTap;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -96,12 +98,21 @@ class ClientTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Text(
-                pendingAmount,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  Text(
+                    pendingAmount,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                    ),
+                  ),
+                  if (action != null) ...<Widget>[
+                    const SizedBox(height: 4),
+                    action!,
+                  ],
+                ],
               ),
             ],
           ),

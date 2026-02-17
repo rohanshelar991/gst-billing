@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/client_record.dart';
 import '../models/invoice_record.dart';
+import '../models/reminder_record.dart';
+import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/action_card.dart';
@@ -23,24 +26,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   DateTime _lastUpdated = DateTime.now();
-
-  final List<Map<String, dynamic>> _topClients = <Map<String, dynamic>>[
-    <String, dynamic>{
-      'name': 'Apex Interiors',
-      'revenue': 182000.0,
-      'ratio': 0.88,
-    },
-    <String, dynamic>{
-      'name': 'Urban Pulse Media',
-      'revenue': 145500.0,
-      'ratio': 0.72,
-    },
-    <String, dynamic>{
-      'name': 'Nova Fabricators',
-      'revenue': 93400.0,
-      'ratio': 0.58,
-    },
-  ];
 
   @override
   void initState() {
@@ -105,20 +90,37 @@ class _HomeScreenState extends State<HomeScreen> {
             _buildOverdueBanner(firestore),
             _buildDashboardHero(firestore),
             const SizedBox(height: 12),
-            Text(
-              'Welcome back, Rohan',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+            StreamBuilder<Map<String, dynamic>?>(
+              stream: firestore?.streamUserProfile(),
+              builder:
+                  (
+                    BuildContext context,
+                    AsyncSnapshot<Map<String, dynamic>?> profileSnapshot,
+                  ) {
+                    final String fallbackName =
+                        context
+                            .read<AuthService?>()
+                            ?.currentUser
+                            ?.displayName ??
+                        'Business Owner';
+                    final String userName =
+                        profileSnapshot.data?['name'] as String? ??
+                        fallbackName;
+                    return Text(
+                      'Welcome back, $userName',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    );
+                  },
             ),
             const SizedBox(height: 8),
             _buildRevenueInsightsCard(),
             const SizedBox(height: 16),
             _buildStatCards(firestore),
             const SizedBox(height: 16),
-            _buildTopClientsSection(),
+            _buildTopClientsSection(firestore),
             const SizedBox(height: 16),
-            _buildIncomeTaxReminderCard(),
+            _buildIncomeTaxReminderCard(firestore),
             const SizedBox(height: 16),
             Row(
               children: <Widget>[
@@ -524,74 +526,99 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTopClientsSection() {
+  Widget _buildTopClientsSection(FirestoreService? firestore) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              'Top Clients',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 10),
-            for (final Map<String, dynamic> client in _topClients)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
+        child: StreamBuilder<List<ClientRecord>>(
+          stream:
+              firestore?.streamTopClients(limit: 3) ??
+              Stream<List<ClientRecord>>.value(const <ClientRecord>[]),
+          builder:
+              (
+                BuildContext context,
+                AsyncSnapshot<List<ClientRecord>> snapshot,
+              ) {
+                final List<ClientRecord> topClients =
+                    snapshot.data ?? <ClientRecord>[];
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    SizedBox(
-                      width: 46,
-                      height: 46,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: <Widget>[
-                          CircularProgressIndicator(
-                            value: client['ratio'] as double,
-                            strokeWidth: 5,
-                            backgroundColor: Theme.of(context).dividerColor,
-                          ),
-                          Text(
-                            '${((client['ratio'] as double) * 100).toStringAsFixed(0)}%',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
+                    Text(
+                      'Top Clients',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (topClients.isEmpty)
+                      Text(
+                        'No clients yet. Add your first client to see rankings.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    for (final ClientRecord client in topClients)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          children: <Widget>[
+                            SizedBox(
+                              width: 46,
+                              height: 46,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: <Widget>[
+                                  CircularProgressIndicator(
+                                    value: client.creditUsageRatio,
+                                    strokeWidth: 5,
+                                    backgroundColor: Theme.of(
+                                      context,
+                                    ).dividerColor,
+                                  ),
+                                  Text(
+                                    '${(client.creditUsageRatio * 100).toStringAsFixed(0)}%',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Text(
+                                    client.name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Pending ${_money(client.pendingAmount)}',
+                                  ),
+                                ],
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () =>
+                                  widget.onQuickActionTabSelected(1),
+                              child: const Text('Open'),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            client['name'] as String,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(_money(client['revenue'] as double)),
-                        ],
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => _showMessage('Client details opened.'),
-                      child: const Text('View Details'),
-                    ),
                   ],
-                ),
-              ),
-          ],
+                );
+              },
         ),
       ),
     );
   }
 
-  Widget _buildIncomeTaxReminderCard() {
+  Widget _buildIncomeTaxReminderCard(FirestoreService? firestore) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -612,30 +639,50 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  'Income Tax Reminder',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Advance tax payment due on 15th March.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.92),
-                  ),
-                ),
-              ],
+            child: StreamBuilder<ReminderRecord?>(
+              stream:
+                  firestore?.streamNextReminder() ??
+                  Stream<ReminderRecord?>.value(null),
+              builder:
+                  (
+                    BuildContext context,
+                    AsyncSnapshot<ReminderRecord?> snapshot,
+                  ) {
+                    final ReminderRecord? reminder = snapshot.data;
+                    final String title =
+                        reminder?.title ?? 'No upcoming reminders';
+                    final String description = reminder == null
+                        ? 'Create reminders to track dues and alerts.'
+                        : '${reminder.type} due on '
+                              '${reminder.dueDate.day}/${reminder.dueDate.month}/${reminder.dueDate.year}';
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          description,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.92),
+                              ),
+                        ),
+                      ],
+                    );
+                  },
             ),
           ),
           TextButton(
-            onPressed: () => _showMessage('Reminder acknowledged.'),
+            onPressed: () => widget.onQuickActionTabSelected(3),
             style: TextButton.styleFrom(foregroundColor: Colors.white),
-            child: const Text('Mark Done'),
+            child: const Text('Open'),
           ),
         ],
       ),

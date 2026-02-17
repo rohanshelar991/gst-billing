@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class ReminderRecord {
   const ReminderRecord({
     required this.id,
@@ -94,6 +96,9 @@ class ReminderRecord {
   }
 
   static DateTime _readDate(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
     if (value is DateTime) {
       return value;
     }
@@ -104,66 +109,5 @@ class ReminderRecord {
       return DateTime.tryParse(value) ?? DateTime.now();
     }
     return DateTime.now();
-  }
-
-  static List<ReminderRecord> seed() {
-    return <ReminderRecord>[
-      ReminderRecord(
-        id: 'rem_1',
-        title: 'GST Return Due',
-        type: 'GST',
-        status: 'Pending',
-        priority: 'High',
-        enabled: true,
-        message: 'Dear Client, your GST filing reminder is due on 20th Feb.',
-        dueDate: DateTime(2026, 2, 20),
-        channel: 'SMS',
-        clientName: 'Apex Interiors',
-        createdAt: DateTime(2026, 2, 15),
-        updatedAt: DateTime(2026, 2, 16),
-      ),
-      ReminderRecord(
-        id: 'rem_2',
-        title: 'Invoice Follow-up',
-        type: 'Invoice',
-        status: 'Scheduled',
-        priority: 'Medium',
-        enabled: true,
-        message: 'Dear Client, your invoice of ₹12,000 is due on 25th April.',
-        dueDate: DateTime(2026, 2, 22),
-        channel: 'WhatsApp',
-        clientName: 'Urban Pulse Media',
-        createdAt: DateTime(2026, 2, 16),
-        updatedAt: DateTime(2026, 2, 16),
-      ),
-      ReminderRecord(
-        id: 'rem_3',
-        title: 'Advance Tax Payment',
-        type: 'Income Tax',
-        status: 'Pending',
-        priority: 'High',
-        enabled: false,
-        message: 'Income tax installment due this week.',
-        dueDate: DateTime(2026, 2, 25),
-        channel: 'Email',
-        clientName: 'Nova Fabricators',
-        createdAt: DateTime(2026, 2, 12),
-        updatedAt: DateTime(2026, 2, 15),
-      ),
-      ReminderRecord(
-        id: 'rem_4',
-        title: 'Client Renewal Alert',
-        type: 'Invoice',
-        status: 'Done',
-        priority: 'Low',
-        enabled: true,
-        message: 'Dear Client, service renewal discussion reminder.',
-        dueDate: DateTime(2026, 2, 28),
-        channel: 'Call',
-        clientName: 'Skyline Traders',
-        createdAt: DateTime(2026, 2, 9),
-        updatedAt: DateTime(2026, 2, 14),
-      ),
-    ];
   }
 }

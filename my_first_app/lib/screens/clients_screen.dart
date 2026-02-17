@@ -41,18 +41,29 @@ class _ClientsScreenState extends State<ClientsScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _showAddClientSheet() {
+  void _showClientSheet({ClientRecord? client}) {
     final GlobalKey<FormState> formKey = GlobalKey<FormState>();
-    final TextEditingController nameController = TextEditingController();
-    final TextEditingController phoneController = TextEditingController();
-    final TextEditingController emailController = TextEditingController();
-    final TextEditingController addressController = TextEditingController();
+    final TextEditingController nameController = TextEditingController(
+      text: client?.name ?? '',
+    );
+    final TextEditingController phoneController = TextEditingController(
+      text: client?.phone ?? '',
+    );
+    final TextEditingController emailController = TextEditingController(
+      text: client?.email ?? '',
+    );
+    final TextEditingController addressController = TextEditingController(
+      text: client?.address ?? '',
+    );
     final TextEditingController gstinController = TextEditingController();
+    if (client != null) {
+      gstinController.text = client.gstin;
+    }
     final TextEditingController stateController = TextEditingController(
-      text: 'Corporate',
+      text: client?.segment ?? 'Corporate',
     );
     final TextEditingController creditLimitController = TextEditingController(
-      text: '100000',
+      text: client?.creditLimit.toStringAsFixed(0) ?? '100000',
     );
 
     showModalBottomSheet<void>(
@@ -92,7 +103,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      'Add Client',
+                      client == null ? 'Add Client' : 'Edit Client',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -232,32 +243,53 @@ class _ClientsScreenState extends State<ClientsScreen> {
                           final NavigatorState navigator = Navigator.of(
                             context,
                           );
+                          final double creditLimit =
+                              double.tryParse(
+                                creditLimitController.text.trim(),
+                              ) ??
+                              0;
                           try {
-                            await firestoreService.addClient(
-                              name: nameController.text.trim(),
-                              phone: phoneController.text.trim(),
-                              email: emailController.text.trim(),
-                              address: addressController.text.trim(),
-                              gstin: gstinController.text.trim(),
-                              state: stateController.text.trim(),
-                              creditLimit:
-                                  double.tryParse(
-                                    creditLimitController.text.trim(),
-                                  ) ??
-                                  0,
-                            );
-                            await analyticsService.logEvent('add_client');
+                            if (client == null) {
+                              await firestoreService.addClient(
+                                name: nameController.text.trim(),
+                                phone: phoneController.text.trim(),
+                                email: emailController.text.trim(),
+                                address: addressController.text.trim(),
+                                gstin: gstinController.text.trim(),
+                                state: stateController.text.trim(),
+                                creditLimit: creditLimit,
+                              );
+                              await analyticsService.logEvent('add_client');
+                            } else {
+                              await firestoreService.updateClient(
+                                clientId: client.id,
+                                name: nameController.text.trim(),
+                                phone: phoneController.text.trim(),
+                                email: emailController.text.trim(),
+                                address: addressController.text.trim(),
+                                gstin: gstinController.text.trim(),
+                                state: stateController.text.trim(),
+                                creditLimit: creditLimit,
+                              );
+                              await analyticsService.logEvent('edit_client');
+                            }
                             if (!mounted) {
                               return;
                             }
                             navigator.pop();
-                            _showMessage('Client saved to Firestore.');
+                            _showMessage(
+                              client == null
+                                  ? 'Client saved to Firestore.'
+                                  : 'Client updated.',
+                            );
                           } catch (error) {
                             _showMessage('Could not save client: $error');
                           }
                         },
                         icon: const Icon(Icons.person_add_alt_1),
-                        label: const Text('Save Client'),
+                        label: Text(
+                          client == null ? 'Save Client' : 'Update Client',
+                        ),
                       ),
                     ),
                   ],
@@ -334,6 +366,21 @@ class _ClientsScreenState extends State<ClientsScreen> {
         );
       },
     );
+  }
+
+  Future<void> _deleteClient(ClientRecord client) async {
+    final FirestoreService firestoreService = context.read<FirestoreService>();
+    final AnalyticsService analyticsService = context.read<AnalyticsService>();
+    try {
+      await firestoreService.deleteClient(clientId: client.id);
+      await analyticsService.logEvent('delete_client');
+      if (!mounted) {
+        return;
+      }
+      _showMessage('Client deleted.');
+    } catch (error) {
+      _showMessage('Could not delete client: $error');
+    }
   }
 
   @override
@@ -416,7 +463,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
                               ),
                             ),
                             FilledButton.tonalIcon(
-                              onPressed: _showAddClientSheet,
+                              onPressed: () => _showClientSheet(),
                               style: FilledButton.styleFrom(
                                 backgroundColor: Colors.white.withValues(
                                   alpha: 0.2,
@@ -519,6 +566,30 @@ class _ClientsScreenState extends State<ClientsScreen> {
                               email: '${client.email}  •  ${client.segment}',
                               pendingAmount: _money(client.pendingAmount),
                               isActive: client.isActive,
+                              action: PopupMenuButton<String>(
+                                icon: const Icon(Icons.more_vert, size: 18),
+                                onSelected: (String value) {
+                                  if (value == 'edit') {
+                                    _showClientSheet(client: client);
+                                    return;
+                                  }
+                                  if (value == 'delete') {
+                                    _deleteClient(client);
+                                  }
+                                },
+                                itemBuilder: (BuildContext context) {
+                                  return const <PopupMenuEntry<String>>[
+                                    PopupMenuItem<String>(
+                                      value: 'edit',
+                                      child: Text('Edit'),
+                                    ),
+                                    PopupMenuItem<String>(
+                                      value: 'delete',
+                                      child: Text('Delete'),
+                                    ),
+                                  ];
+                                },
+                              ),
                               onTap: () {
                                 Navigator.push(
                                   context,
@@ -603,6 +674,8 @@ class ClientDetailScreen extends StatelessWidget {
                     _infoRow(Icons.email_outlined, client.email),
                     const SizedBox(height: 8),
                     _infoRow(Icons.phone_outlined, client.phone),
+                    const SizedBox(height: 8),
+                    _infoRow(Icons.badge_outlined, client.gstin),
                     const SizedBox(height: 8),
                     _infoRow(Icons.location_on_outlined, client.address),
                   ],

@@ -23,17 +23,25 @@ class _ProductsScreenState extends State<ProductsScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _openAddProductSheet() {
+  void _openProductSheet({ProductRecord? product}) {
     final GlobalKey<FormState> formKey = GlobalKey<FormState>();
-    final TextEditingController nameController = TextEditingController();
-    final TextEditingController hsnController = TextEditingController();
-    final TextEditingController costController = TextEditingController();
-    final TextEditingController sellingController = TextEditingController();
+    final TextEditingController nameController = TextEditingController(
+      text: product?.name ?? '',
+    );
+    final TextEditingController hsnController = TextEditingController(
+      text: product?.hsnCode ?? '',
+    );
+    final TextEditingController costController = TextEditingController(
+      text: product?.costPrice.toStringAsFixed(2) ?? '',
+    );
+    final TextEditingController sellingController = TextEditingController(
+      text: product?.sellingPrice.toStringAsFixed(2) ?? '',
+    );
     final TextEditingController gstController = TextEditingController(
-      text: '18',
+      text: product?.gstRate.toStringAsFixed(0) ?? '18',
     );
     final TextEditingController stockController = TextEditingController(
-      text: '0',
+      text: product?.stockQuantity.toString() ?? '0',
     );
 
     showModalBottomSheet<void>(
@@ -73,7 +81,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      'Add Product',
+                      product == null ? 'Add Product' : 'Edit Product',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -216,32 +224,48 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           final NavigatorState navigator = Navigator.of(
                             context,
                           );
+                          final double costPrice =
+                              double.tryParse(costController.text.trim()) ?? 0;
+                          final double sellingPrice =
+                              double.tryParse(sellingController.text.trim()) ??
+                              0;
+                          final double gstRate =
+                              double.tryParse(gstController.text.trim()) ?? 0;
+                          final int stockQuantity =
+                              int.tryParse(stockController.text.trim()) ?? 0;
 
                           try {
-                            await firestoreService.addProduct(
-                              name: nameController.text.trim(),
-                              hsnCode: hsnController.text.trim(),
-                              costPrice:
-                                  double.tryParse(costController.text.trim()) ??
-                                  0,
-                              sellingPrice:
-                                  double.tryParse(
-                                    sellingController.text.trim(),
-                                  ) ??
-                                  0,
-                              gstRate:
-                                  double.tryParse(gstController.text.trim()) ??
-                                  0,
-                              stockQuantity:
-                                  int.tryParse(stockController.text.trim()) ??
-                                  0,
-                            );
-                            await analyticsService.logEvent('add_product');
+                            if (product == null) {
+                              await firestoreService.addProduct(
+                                name: nameController.text.trim(),
+                                hsnCode: hsnController.text.trim(),
+                                costPrice: costPrice,
+                                sellingPrice: sellingPrice,
+                                gstRate: gstRate,
+                                stockQuantity: stockQuantity,
+                              );
+                              await analyticsService.logEvent('add_product');
+                            } else {
+                              await firestoreService.updateProduct(
+                                productId: product.id,
+                                name: nameController.text.trim(),
+                                hsnCode: hsnController.text.trim(),
+                                costPrice: costPrice,
+                                sellingPrice: sellingPrice,
+                                gstRate: gstRate,
+                                stockQuantity: stockQuantity,
+                              );
+                              await analyticsService.logEvent('edit_product');
+                            }
                             if (!mounted) {
                               return;
                             }
                             navigator.pop();
-                            _showMessage('Product saved to Firestore.');
+                            _showMessage(
+                              product == null
+                                  ? 'Product saved to Firestore.'
+                                  : 'Product updated.',
+                            );
                           } catch (error) {
                             if (!mounted) {
                               return;
@@ -250,7 +274,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           }
                         },
                         icon: const Icon(Icons.save_outlined),
-                        label: const Text('Save Product'),
+                        label: Text(
+                          product == null ? 'Save Product' : 'Update Product',
+                        ),
                       ),
                     ),
                   ],
@@ -261,6 +287,21 @@ class _ProductsScreenState extends State<ProductsScreen> {
         );
       },
     );
+  }
+
+  Future<void> _deleteProduct(ProductRecord product) async {
+    final FirestoreService firestoreService = context.read<FirestoreService>();
+    final AnalyticsService analyticsService = context.read<AnalyticsService>();
+    try {
+      await firestoreService.deleteProduct(productId: product.id);
+      await analyticsService.logEvent('delete_product');
+      if (!mounted) {
+        return;
+      }
+      _showMessage('Product deleted.');
+    } catch (error) {
+      _showMessage('Could not delete product: $error');
+    }
   }
 
   @override
@@ -326,7 +367,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           ),
                         ),
                         FilledButton.tonalIcon(
-                          onPressed: _openAddProductSheet,
+                          onPressed: () => _openProductSheet(),
                           style: FilledButton.styleFrom(
                             backgroundColor: Colors.white.withValues(
                               alpha: 0.2,
@@ -397,6 +438,30 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                 Text(
                                   'Stock: ${product.stockQuantity}',
                                   style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert, size: 18),
+                                  onSelected: (String value) {
+                                    if (value == 'edit') {
+                                      _openProductSheet(product: product);
+                                      return;
+                                    }
+                                    if (value == 'delete') {
+                                      _deleteProduct(product);
+                                    }
+                                  },
+                                  itemBuilder: (BuildContext context) {
+                                    return const <PopupMenuEntry<String>>[
+                                      PopupMenuItem<String>(
+                                        value: 'edit',
+                                        child: Text('Edit'),
+                                      ),
+                                      PopupMenuItem<String>(
+                                        value: 'delete',
+                                        child: Text('Delete'),
+                                      ),
+                                    ];
+                                  },
                                 ),
                               ],
                             ),

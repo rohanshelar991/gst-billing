@@ -82,6 +82,7 @@ class _AdvancedCalculatorScreenState extends State<AdvancedCalculatorScreen> {
   double _profitPercent = 0;
   double _marginPercent = 0;
   double _profitAmount = 0;
+  double _memoryValue = 0;
 
   CalculatorMode _calculatorMode = CalculatorMode.normal;
 
@@ -186,7 +187,7 @@ class _AdvancedCalculatorScreenState extends State<AdvancedCalculatorScreen> {
       case 'MR':
       case 'M+':
       case 'M-':
-        _showMemoryHint(label);
+        _handleMemoryAction(label);
         break;
       default:
         break;
@@ -463,11 +464,45 @@ class _AdvancedCalculatorScreenState extends State<AdvancedCalculatorScreen> {
     );
   }
 
-  void _showMemoryHint(String action) {
+  double _currentMemoryOperand() {
+    try {
+      return _evaluateTokens(_tokens);
+    } catch (_) {
+      return double.tryParse(_result) ?? 0;
+    }
+  }
+
+  void _handleMemoryAction(String action) {
+    String message = '';
+    setState(() {
+      switch (action) {
+        case 'MC':
+          _memoryValue = 0;
+          message = 'Memory cleared';
+          break;
+        case 'MR':
+          final String recalled = _formatForDisplay(_memoryValue);
+          _tokens = <String>[recalled];
+          _result = recalled;
+          _justEvaluated = true;
+          message = 'Memory recalled';
+          break;
+        case 'M+':
+          _memoryValue += _currentMemoryOperand();
+          message = 'Added to memory';
+          break;
+        case 'M-':
+          _memoryValue -= _currentMemoryOperand();
+          message = 'Subtracted from memory';
+          break;
+        default:
+          break;
+      }
+    });
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('$action is UI-only for now.'),
+        content: Text(message),
         duration: const Duration(milliseconds: 900),
       ),
     );
@@ -496,7 +531,7 @@ class _AdvancedCalculatorScreenState extends State<AdvancedCalculatorScreen> {
     final double afterDiscount = subtotal - discountAmount;
     final double markupAmount = afterDiscount * (markupPercent / 100);
     final double taxableAmount = afterDiscount + markupAmount;
-    final double gstBaseAmount = subtotal;
+    final double gstBaseAmount = taxableAmount;
     final double gstAmount = _selectedGstType == GstType.noGst
         ? 0
         : gstBaseAmount * (_selectedGstRate / 100);

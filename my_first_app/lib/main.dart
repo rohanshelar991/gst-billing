@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
+import 'screens/main_app.dart';
 import 'services/analytics_service.dart';
 import 'services/auth_service.dart';
 import 'services/firestore_service.dart';
@@ -53,8 +55,35 @@ class SmartTaxInvoiceApp extends StatelessWidget {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: mode,
-          home: const LoginScreen(),
+          home: const AuthGate(),
         );
+      },
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final AuthService authService = context.read<AuthService>();
+    return StreamBuilder<User?>(
+      stream: authService.authStateChanges(),
+      builder: (BuildContext context, AsyncSnapshot<User?> snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError) {
+          return const LoginScreen();
+        }
+        final User? user = snapshot.data;
+        if (user == null) {
+          return const LoginScreen();
+        }
+        return const MainApp();
       },
     );
   }

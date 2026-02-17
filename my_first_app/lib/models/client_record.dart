@@ -1,9 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class ClientRecord {
   const ClientRecord({
     required this.id,
     required this.name,
     required this.email,
     required this.phone,
+    required this.gstin,
     required this.pendingAmount,
     required this.invoices,
     required this.isActive,
@@ -21,6 +24,7 @@ class ClientRecord {
   final String name;
   final String email;
   final String phone;
+  final String gstin;
   final double pendingAmount;
   final int invoices;
   final bool isActive;
@@ -44,6 +48,7 @@ class ClientRecord {
     String? name,
     String? email,
     String? phone,
+    String? gstin,
     double? pendingAmount,
     int? invoices,
     bool? isActive,
@@ -61,6 +66,7 @@ class ClientRecord {
       name: name ?? this.name,
       email: email ?? this.email,
       phone: phone ?? this.phone,
+      gstin: gstin ?? this.gstin,
       pendingAmount: pendingAmount ?? this.pendingAmount,
       invoices: invoices ?? this.invoices,
       isActive: isActive ?? this.isActive,
@@ -80,6 +86,7 @@ class ClientRecord {
       'name': name,
       'email': email,
       'phone': phone,
+      'gstin': gstin,
       'pendingAmount': pendingAmount,
       'invoices': invoices,
       'isActive': isActive,
@@ -106,6 +113,7 @@ class ClientRecord {
       name: map['name'] as String? ?? '',
       email: map['email'] as String? ?? '',
       phone: map['phone'] as String? ?? '',
+      gstin: map['gstin'] as String? ?? '',
       pendingAmount: (map['pendingAmount'] as num?)?.toDouble() ?? 0,
       invoices: (map['invoices'] as num?)?.toInt() ?? 0,
       isActive: map['isActive'] as bool? ?? true,
@@ -121,6 +129,9 @@ class ClientRecord {
   }
 
   static DateTime _readDate(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
     if (value is DateTime) {
       return value;
     }
@@ -131,61 +142,5 @@ class ClientRecord {
       return DateTime.tryParse(value) ?? DateTime.now();
     }
     return DateTime.now();
-  }
-
-  static List<ClientRecord> seed() {
-    return <ClientRecord>[
-      ClientRecord(
-        id: 'client_1',
-        name: 'Apex Interiors',
-        email: 'finance@apexinteriors.com',
-        phone: '+91 98200 12345',
-        pendingAmount: 27500,
-        invoices: 14,
-        isActive: true,
-        segment: 'Corporate',
-        creditLimit: 300000,
-        usedCredit: 157000,
-        history: const <String>['INV-2031', 'INV-2022', 'INV-2018'],
-        address: 'Bandra West, Mumbai',
-        notes: 'High-value client. Weekly follow-up preferred.',
-        createdAt: DateTime(2025, 12, 4),
-        updatedAt: DateTime(2026, 2, 12),
-      ),
-      ClientRecord(
-        id: 'client_2',
-        name: 'Urban Pulse Media',
-        email: 'accounts@urbanpulse.media',
-        phone: '+91 97665 30303',
-        pendingAmount: 0,
-        invoices: 8,
-        isActive: true,
-        segment: 'Retail',
-        creditLimit: 150000,
-        usedCredit: 38000,
-        history: const <String>['INV-2030', 'INV-2024', 'INV-2017'],
-        address: 'Koregaon Park, Pune',
-        notes: 'Prefers WhatsApp reminders.',
-        createdAt: DateTime(2025, 11, 18),
-        updatedAt: DateTime(2026, 2, 10),
-      ),
-      ClientRecord(
-        id: 'client_3',
-        name: 'Nova Fabricators',
-        email: 'office@novafab.in',
-        phone: '+91 99871 55667',
-        pendingAmount: 18750,
-        invoices: 11,
-        isActive: false,
-        segment: 'Wholesale',
-        creditLimit: 220000,
-        usedCredit: 198000,
-        history: const <String>['INV-2029', 'INV-2020', 'INV-2015'],
-        address: 'MIDC, Nashik',
-        notes: 'Needs tighter credit control.',
-        createdAt: DateTime(2025, 10, 30),
-        updatedAt: DateTime(2026, 2, 4),
-      ),
-    ];
   }
 }

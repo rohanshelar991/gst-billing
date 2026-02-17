@@ -14,9 +14,21 @@ class AuthService {
   FirebaseFirestore get _firestore =>
       _firestoreOverride ?? FirebaseFirestore.instance;
 
-  Stream<User?> authStateChanges() => _auth.authStateChanges();
+  Stream<User?> authStateChanges() {
+    try {
+      return _auth.authStateChanges();
+    } catch (_) {
+      return Stream<User?>.value(null);
+    }
+  }
 
-  User? get currentUser => _auth.currentUser;
+  User? get currentUser {
+    try {
+      return _auth.currentUser;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<UserCredential> login({
     required String email,
@@ -35,7 +47,7 @@ class AuthService {
     required String phone,
     required String businessName,
     required String gstin,
-    String role = 'owner',
+    String role = 'admin',
   }) async {
     final UserCredential credential = await _auth
         .createUserWithEmailAndPassword(
