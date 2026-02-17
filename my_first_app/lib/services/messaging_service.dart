@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 
 import 'auth_service.dart';
 
@@ -33,19 +34,31 @@ class MessagingService {
     }
     _initialized = true;
 
-    await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-    );
+    try {
+      await _messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
 
-    final String? initialToken = await _messaging.getToken();
-    await _saveToken(initialToken);
+      String? initialToken;
+      try {
+        initialToken = await _messaging.getToken();
+      } catch (error) {
+        if (!(kIsWeb &&
+            error.toString().contains('failed-service-worker-registration'))) {
+          rethrow;
+        }
+      }
+      await _saveToken(initialToken);
 
-    _tokenSubscription = _messaging.onTokenRefresh.listen((String token) {
-      _saveToken(token);
-    });
+      _tokenSubscription = _messaging.onTokenRefresh.listen((String token) {
+        _saveToken(token);
+      }, onError: (_) {});
+    } catch (_) {
+      // Notifications are optional; skip initialization failures.
+    }
   }
 
   Future<void> _saveToken(String? token) async {
